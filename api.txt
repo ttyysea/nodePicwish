@@ -1,0 +1,66 @@
+const express = require('express');
+const axios = require('axios');
+const app = express();
+const cors = require('cors');
+const bodyParser = require('body-parser');
+const formData = require('form-data');
+const fs = require('fs'); // Import the 'fs' module for file operations
+
+app.use(cors());
+app.use(bodyParser.json({ limit: '50mb' })); // Set a suitable body size limit
+
+app.post('/processImage', async (req, res) => {
+  try {
+    console.log('Received POST request with data:');
+    console.log('Request Body:', req.body);
+
+    const { sync, image_base64, mask_base64 } = req.body;
+
+    // Check if both image and mask data are provided
+    if (!image_base64 || !mask_base64) {
+      return res.status(400).json({ error: 'Missing image or mask data' });
+    }
+
+    // Convert base64 data to buffer
+    const imageBuffer = Buffer.from(image_base64, 'base64');
+    const maskBuffer = Buffer.from(mask_base64, 'base64');
+
+    // Create files from the buffers (if needed)
+    fs.writeFileSync('image.jpg', imageBuffer); // Save the image as a file
+    fs.writeFileSync('mask.jpg', maskBuffer); // Save the mask as a file
+
+    // Continue with your processing logic
+    // ...
+
+    const formDataToSend = new formData();
+    formDataToSend.append('sync', sync);
+    formDataToSend.append('image_file', fs.createReadStream('image.jpg'), { filename: 'image.jpg' });
+    formDataToSend.append('mask_file', fs.createReadStream('mask.jpg'), { filename: 'mask.jpg' });
+
+    const apiUrl = 'https://techhk.aoscdn.com/api/tasks/visual/inpaint';
+    const apiKey = 'wxcsa64drefid605j';
+
+    // Send the FormData to the API
+    const response = await axios.post(apiUrl, formDataToSend, {
+      headers: {
+        ...formDataToSend.getHeaders(),
+        'X-API-KEY': apiKey,
+      },
+    });
+
+    if (response.status === 200) {
+      const responseData = response.data;
+      res.json(responseData);
+    } else {
+      res.status(response.status).send('API request failed');
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal server error');
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
